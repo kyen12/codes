@@ -1,13 +1,6 @@
 # codes
 いろんな関数をメモする用
 
-///今まで何日生きたか計算したいよね
-import datetime
-today = datetime.date.today()
-birthday = datetime.date(西暦,月,日)
-life = today - birthday
-print(life.days)
-
 ///list型のいろんな関数
 list_int = [データ1,データ2,....,データn]
 list_int[0]=データ1     //0番目のデータ
