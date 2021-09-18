@@ -12,3 +12,6 @@ list_A.extend(list_B)     //データの連結(list_intの中身が変化)
 list_int[0:3]     //０番目から３番目の一つ前までの要素を取り出す
 list_int[:4]     //最初から４番目の一つ前までの要素を取り出す
 list_int[2:]     //２番目から最後までの要素を取り出す
+
+list_int.sort()     //小さい順に並べ替える
+list_int.reverse()     //逆に並べ替える
