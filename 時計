@@ -1,1 +1,2 @@
-
+ima=datetime.datetime.now()
+print(ima)
