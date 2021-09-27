@@ -1,0 +1,13 @@
+#10人でするとき、市民3、人狼２、占い１、霊媒師１、狂人１、騎士１、パン屋１
+import random
+roll_list=[]
+for i in range(10):
+    jinro_list=['人狼','人狼','市民','市民','市民','占い師','霊媒師','狂人','騎士','パン屋']
+    roll=random.randint(0,9)#random.randit(始まりの数,終わりの数)
+    #二かい同じやつ出ないようにCheck
+    while roll in roll_list:
+        roll=random.randint(0,9)
+    roll_list+=[roll]#リストにrollの番号追加
+    userid=['yuki','misaki','ikeda','yosida','miyamoto','uenoyama','izumi','suzuki','sakai','hunasama']#userIDを取得
+    userid[i]
+    print(userid[i],jinro_list[roll])
