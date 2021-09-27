@@ -1,1 +1,24 @@
+from time import sleep
+print('3秒カウント')
+sleep(3)
+print('3秒たったよ')
 
+#数え上げの関数
+target_time=10 　#設定したい時間を設定
+def up_timer(secs):
+    for i in range(0,secs):#sec になるまで数え上げる
+        print(i)
+        sleep(1)
+    print("時間です！")
+up_timer(target_time)
+  
+#カウントダウンの関数
+from time import sleep
+
+def down_timer(secs):
+    for i in range(secs,-1,-1):#secs＜＝i<-1（第二引数）の範囲で-1（第三範囲）ずつ変化 始めi=secs
+        print(i)
+        sleep(1)
+    print('時間です')
+target_time=10
+down_timer(target_time)
