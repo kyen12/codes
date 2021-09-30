@@ -1,0 +1,11 @@
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+
+scope = ['https://spreadsheets.google.com/feeds',
+         'https://www.googleapis.com/auth/drive']
+
+credentials = ServiceAccountCredentials.from_json_keyfile_name('kyen12jinrou-4b537d394e0e.json', scope)
+gc = gspread.authorize(credentials)
+wks = gc.open('jinrou_userid').sheet1
+wks.update_acell('A1', 'lineuserid')#取得したIDをいれてもらう lineuserid　グルのほうで打ち込んでもらう形にする？？ 
+print(wks.acell('A1'))
