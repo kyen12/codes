@@ -1,0 +1,61 @@
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+
+class RemoteControlGoogleSpreadSheet:
+    def __init__(self, title):
+        scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
+        credentials = ServiceAccountCredentials.from_json_keyfile_name('kyen12jinrou-4b537d394e0e.json', scope)
+        global gc
+        gc = gspread.authorize(credentials)
+        gc = gc.open("jinrou_userid")#操作するスプレッドシートを指定する
+
+        try :
+            #新たにワークシートを作成し、Worksheetオブジェクトをworksheetに格納します。
+            worksheet = gc.add_worksheet(title=title, rows="100", cols="2")
+        except :
+            #すでにワークシートが存在しているときは、そのワークシートのWorksheetオブジェクトを格納します。
+            worksheet = gc.worksheet(title)
+        self.worksheet = worksheet #worksheetをメンバに格納
+        self.Todo = 1 #書き込む行を指定しているメンバ
+        self.Done = 2 #書き込む行を指定しているメンバ
+        self.worksheet.update_cell(1, self.Todo, "Todo")
+        self.worksheet.update_cell(1, self.Done, "Done")
+    
+    
+    def write_to_Todo(self, text):
+        #self.worksheet.update_cell(self.detect_last_row(), self.Todo, text)
+        self.worksheet.update_cell(self.detect_last_row(),self.Todo,text)
+    def detect_last_row(self):
+        row_count = 1
+        while self.worksheet.cell(row_count, 1).value != None :#ダブルクオーテーションはerrorでる
+            row_count += 1
+        return row_count
+    #Todoのcolの中身をすべて取得して返す
+    def get_Todo(self):
+        #Todo列の値をリストにしてすべて取得
+        TodoList = self.worksheet.col_values(self.Todo)
+
+        #TodoからDoneに移動させた分の空白を除く
+        TodoList = [todo for todo in TodoList if todo != ""]
+
+        #Todoの項目を改行と・で連結
+        #TodoList[1]はTodoであるため除く
+        TodoList = "\n・".join(TodoList[1:])
+
+        return TodoList
+    #ワークシートをリセットする
+    def clear_worksheet(self):
+        self.worksheet.clear()
+        self.worksheet.update_cell(1, self.Todo, "Todo")
+        self.worksheet.update_cell(1, self.Done, "Done")
+    #ワークシートを削除する
+    def delete_worksheet(self):
+        gc.del_worksheet(self.worksheet)
+
+worksheets = {}
+#text = "こんにちは"
+user_id = "Uagjiahn36"
+user_name = "ケント"
+worksheet = RemoteControlGoogleSpreadSheet(user_name)
+worksheet.write_to_Todo(user_name)
+#worksheet.update_cell(2, 1, "こんにちは")
