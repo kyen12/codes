@@ -1,0 +1,746 @@
+from re import template
+from flask import Flask,request,abort
+from flask.app import setupmethod
+from linebot import LineBotApi,WebhookHandler
+from linebot.exceptions import InvalidSignatureError
+from linebot.models import (MessageEvent,TextMessage,TextSendMessage,
+                            ImageSendMessage, FollowEvent, UnfollowEvent,
+                            TemplateSendMessage, ButtonsTemplate, URIAction,
+                            CarouselColumn, CarouselTemplate, URITemplateAction,
+                            PostbackTemplateAction, PostbackEvent, JoinEvent,LeaveEvent
+                            )
+from linebot.models.actions import MessageAction, PostbackAction
+from linebot.models.events import Postback, PostbackEvent
+import random, string, os, gspread, time, glob , psycopg2
+from oauth2client.client import Storage
+from oauth2client.service_account import ServiceAccountCredentials
+from Class import  RemoteControlGoogleSpreadSheet,button,poll,DB
+
+
+app=Flask(__name__)
+#環境変数の取得
+#直打ちは危険なのでosで取得
+DATABASE_URL = os.environ['DATABASE_URL']
+YOUR_CHANNEL_ACCESS_TOKEN = os.environ["YOUR_CHANNEL_ACCESS_TOKEN"]
+YOUR_CHANNEL_SECRET = os.environ["YOUR_CHANNEL_SECRET"]
+line_bot_api=LineBotApi(YOUR_CHANNEL_ACCESS_TOKEN)
+handler=WebhookHandler(YOUR_CHANNEL_SECRET)
+db=DB()
+
+
+
+
+def connect():
+   return psycopg2.connect(DATABASE_URL,sslmode='require')
+def make_image_message():
+    messages = ImageSendMessage(
+        original_content_url="https://lh4.googleusercontent.com/TcrQgIcM9u6KNJMoSXbmjWWKIVVx_lQ0DwgUkQz_U6IrD0ncT0KXOvj6O_fh6ud3JyajHhkBqc7wdAdd0N_u9WipEZx-c_-RBqCJxVMj9VWUvI6aZxKgJ-qcUnSukHK7PQ=w1280", #JPEG 最大画像サイズ：240×240 最大ファイルサイズ：1MB(注意:仕様が変わっていた)
+        preview_image_url="https://lh4.googleusercontent.com/TcrQgIcM9u6KNJMoSXbmjWWKIVVx_lQ0DwgUkQz_U6IrD0ncT0KXOvj6O_fh6ud3JyajHhkBqc7wdAdd0N_u9WipEZx-c_-RBqCJxVMj9VWUvI6aZxKgJ-qcUnSukHK7PQ=w1280" #JPEG 最大画像サイズ：1024×1024 最大ファイルサイズ：1MB(注意:仕様が変わっていた)
+    )
+    return messages
+"""def getouhyou(user_id):#state=aliveのusernameとってくる,
+    #worksheet=RemoteControlGoogleSpreadSheet(game_id)
+    touhyou_name=[]
+    touhyou_role=[]
+    touhyou_id=[]
+    statusList = worksheet.get_status()
+    for i in range(worksheet.detect_last_row(1)-2):
+        if statusList[i]=="alive" and idList[i] != user_id:
+            #その列のusernameとりたい
+            touhyou_name.append(nameList[i])
+            if roleList[i] == "人狼":
+                uranairole="人狼"
+            elif roleList[i] != "人狼":
+                uranairole="人間"
+            else:
+                pass
+            touhyou_role.append(uranairole)
+            touhyou_id.append(idList[i])
+    return touhyou_name, touhyou_role, touhyou_id"""
+def getouhyou(user_id):
+    with db:
+        cur = db.execute("select id from tousaka where id not in ('{}') and status='alive'". format(user_id))
+        rows = cur.fetchall()
+        touhyou_id=[]
+        for i in rows:
+            touhyou_id.append(i[0])
+        cur = db.execute("select name from tousaka where id not in ('{}') and status='alive'". format(user_id))
+        rows = cur.fetchall()
+        touhyou_name=[]
+        for i in rows:
+            touhyou_name.append(i[0])
+        cur = db.execute("select role from tousaka where id not in ('{}') and status='alive'". format(user_id))
+        rows = cur.fetchall()
+        touhyou_r=[]#一旦DBからrole正しく取得
+        for i in rows:
+            touhyou_r.append(i[0])
+        touhyou_role=[]
+        for m in range(len(touhyou_r)):
+            if touhyou_r[m] == "人狼":
+                touhyou_role.append("人狼")
+            elif touhyou_r[m] != "人狼":
+                touhyou_role.append("人間")
+            else:
+                pass
+    return touhyou_name,touhyou_role,touhyou_id
+
+
+"""#人狼投票専用の生きてる人のリスト（人狼をのぞく生存者）
+def jinrou_touhyou():#state=aliveのusernameとってくる,
+    #worksheet=RemoteControlGoogleSpreadSheet(game_id)
+    jintouhyou=[]
+    statusList = worksheet.get_status()
+    jinrou_Meibo_List=jinrou_Meibo()
+    for i in range(worksheet.detect_last_row(1)-2):
+        if statusList[i]=="alive" and idList[i] not in jinrou_Meibo_List:
+            #その列のusernameとりたい
+            jintouhyou.append(nameList[i])
+    return jintouhyou"""
+def jinrou_touhyou():
+    with db:
+        cur=db.execute("select name from tousaka where status='alive' and role !='人狼'")
+        rows=cur.fetchall()
+        jintouhyou=[]
+        for i in rows:
+            jintouhyou.append(i[0])
+    return jintouhyou
+
+def death_note():
+    with db:
+        cur=db.execute("select name from tousaka where status='death'")
+        rows = cur.fetchall()
+        deathnotelist_n = []
+        #リストの中のコンマを取り除く
+        for i in rows:
+            deathnotelist_n.append(i[0])
+        cur=db.execute("select role from tousaka where status='death'")
+        rows = cur.fetchall()
+        deathnotelist_r = []
+        #リストの中のコンマを取り除く
+        for i in rows:
+            deathnotelist_r.append(i[0])
+    return deathnotelist_n,deathnotelist_r
+"""#死亡者リスト
+def death_note():
+    death_note_List_n = []
+    death_note_List_r = []
+    #worksheet=RemoteControlGoogleSpreadSheet(game_id)
+    statusList = worksheet.get_status()
+    statusList = worksheet.get_status()
+    for i in range(worksheet.detect_last_row(1)-2):
+        if statusList[i]=="death":
+            #その列のusernameとりたい
+            death_note_List_n.append(nameList[i])
+            death_note_List_r.append(roleList[i])
+    return death_note_List_n, death_note_List_r"""
+
+"""#人狼の生存者リスト
+def jinrou_Meibo():
+    global jinrou_Meibo_List
+    jinrou_Meibo_List=[]
+    worksheet=RemoteControlGoogleSpreadSheet(game_id)
+    roleList = worksheet.get_role()
+    statusList = worksheet.get_status()
+    for i in range(worksheet.detect_last_row(1)-2):
+        if roleList[i]=="人狼" and statusList[i]=="alive":
+            jinrou_Meibo_List.append(idList[i])
+        else:
+            pass
+    return jinrou_Meibo_List"""
+#生きている人狼のリスト取得
+def jinrou_Meibo():
+    with db:
+        cur=db.execute("select name from tousaka where status='alive' and role='人狼'")
+        rows = cur.fetchall()
+        jinrou_Meibo_List=[]
+        #リストの中のコンマを取り除く
+        for i in rows:
+            jinrou_Meibo_List.append(i[0])
+    return jinrou_Meibo_List
+
+
+"""#人間の生存者リスト
+def ningen_Meibo():
+    global ningen_Meibo_List
+    ningen_Meibo_List=[]
+    worksheet=RemoteControlGoogleSpreadSheet(game_id)
+    roleList = worksheet.get_role()
+    statusList = worksheet.get_status()
+    for i in range(worksheet.detect_last_row(1)-2):
+        if roleList[i]!="人狼" and statusList[i]=="alive":
+            ningen_Meibo_List.append(idList[i])
+        else:
+            pass
+    return ningen_Meibo_List"""
+
+def game():
+    global night_count
+    idList = []
+            #nameList = worksheet.get_name()
+    with db:
+        cur = db.execute("select id from tousaka")
+        rows = cur.fetchall()
+        for i in rows:
+            idList.append(i[0])
+    roleList = []
+    #nameList = worksheet.get_name()
+    with db:
+        cur = db.execute("select role from tousaka")
+        rows = cur.fetchall()
+        for i in rows:
+            roleList.append(i[0])
+    statusList = []
+    with db:
+        cur = db.execute("select status from tousaka")
+        rows = cur.fetchall()
+        for i in rows:
+            statusList.append(i[0])
+    message = "{}日目の夜がやってきました。\n夜の行動に移ってください。".format(night_count)
+    line_bot_api.push_message(group_id, TextSendMessage(text=message))
+    night_count += 1
+    #白確占い云々etcがある場合はここに追記
+    global dead
+    if dead == "無し":
+        message = "夜が明けました。\n本日の犠牲者はいません。\n"\
+                  "５分間で話し合いを行ってください。"
+        line_bot_api.push_message(group_id, TextSendMessage(text=message))
+    else :
+        message = "夜が明けました。\n本日の犠牲者は「" + dead + "」です\n"\
+                  "５分間で話し合いを行ってください。"
+        line_bot_api.push_message(group_id, TextSendMessage(text=message))
+        dead = "無し"
+    #パン屋
+    with db:
+        cur=db.execute("select id from tousaka where status='alive' and role='パン屋'")
+        message= TextSendMessage(text='パンが届きました')
+        line_bot_api.push_message(group_id, messages=message)
+    with db:
+        cur=db.execute("select id from tousaka where status='death' and role='パン屋'")
+        message= TextSendMessage(text='パンが届きませんでした。')
+        line_bot_api.push_message(group_id, messages=message)
+
+    #本日の生存者のオフセットをリストに格納
+    global list_alive
+    list_alive = []
+    for i in range(len(statusList)):
+        if statusList[i] == "alive":
+            list_alive.append(i)
+
+    with db:
+        cur=db.execute("update tousaka set status='alive' where status='gard'")
+    #各個人に投票用カルーセル送信
+    
+    for i in range(len(statusList)):
+        if statusList[i] == "alive":
+            user_id = idList[i]
+            alive_name = getouhyou(user_id)[0]
+            alive_id = getouhyou(user_id)[2]
+            message = TemplateSendMessage(alt_text="処刑選択",template=CarouselTemplate(columns=poll.execution(alive_name, user_id, alive_id)))
+            line_bot_api.push_message(user_id, messages=message)
+
+"""
+    for i in range(worksheet.detect_last_row(1)-2):
+        #占い師の投票
+        if roleList[i]=="占い師" and statusList[i]=="alive":
+            user_id=idList[i]
+            global touhyou_name, touhyou_role, touhyou_id
+            touhyou_name=getouhyou(user_id)[0]
+            touhyou_role =getouhyou(user_id)[1]
+            message = TemplateSendMessage(alt_text="占い選択",template=CarouselTemplate(columns=poll.fortune_telling(touhyou_name)))
+            line_bot_api.push_message(user_id, messages=message)
+        #人狼のキル投票   
+        elif roleList[i]=="人狼" and statusList[i]=="alive":
+            user_id=idList[i]
+            global jintouhyou
+            jintouhyou=jinrou_touhyou()
+            message = TemplateSendMessage(alt_text="人狼のキル",template=CarouselTemplate(columns=poll.jinrou_killing(jintouhyou)))
+            line_bot_api.push_message(user_id, messages=message)
+        #霊媒師の投票
+        elif roleList[i]=="霊媒師" and statusList[i]=="alive":
+            global death_note_List_n, death_note_List_r
+            user_id=idList[i]
+            death_note_List_n=death_note()[0]
+            death_note_List_r=death_note()[1]
+            message = TemplateSendMessage(alt_text="霊媒師選択",template=CarouselTemplate(columns=poll.reibai_telling(death_note_List_n)))
+            line_bot_api.push_message(user_id, messages=message)
+        #騎士の投票
+        elif roleList[i]=="騎士" and statusList[i]=="alive":
+            global gard
+            gard=[]#生存者全員のリスト
+            user_id=idList[i]
+            statusList = worksheet.get_status()
+            idList = worksheet.get_id()
+            nameList=worksheet.get_name()
+            for i in range(worksheet.detect_last_row(1)-2):
+                if roleList[i]!="騎士" and statusList[i]=="alive" :
+                    gard.append(nameList[i])
+                else:
+                    pass
+            touhyou=getouhyou(user_id)[0]
+            message = TemplateSendMessage(alt_text="騎士選択",template=CarouselTemplate(columns=poll.garding(touhyou)))
+            line_bot_api.push_message(user_id, messages=message)
+        #パン屋
+        elif roleList[i]=="パン屋" and statusList[i]=="alive":
+            message= TextSendMessage(text='パンが届きました')
+            line_bot_api.push_message(group_id, messages=message)
+        elif roleList[i]=="パン屋" and statusList[i]=="death":
+            message= TextSendMessage(text='パンが届きませんでした。')
+            line_bot_api.push_message(group_id, messages=message)
+        else:
+            pass
+"""
+
+@app.route("/callback",methods=["POST"]) #どのURLが関数の引き金になるべきかをFlaskに伝える。
+def callback():
+    signature=request.headers["X-Line-Signature"] #署名の検証(LINEのサーバーからのリクエストにはX-Line-Signatureヘッダが付与されているので、それを検証している。)
+    body=request.get_data(as_text=True)
+    app.logger.info("Request body"+body)
+
+    try:
+        handler.handle(body,signature)
+    except InvalidSignatureError:
+        abort(400)
+    return "OK"
+
+
+@handler.add(FollowEvent)
+def handle_follow(event):
+    message = "このボットをグループに招待することで複数名で人狼ゲームを行うことができる。\n"\
+              "またゲームに参加する場合はグループ内で発行されたゲームIDをここで入力する。"
+    line_bot_api.reply_message(event.reply_token,TextSendMessage(text=message))
+
+"""
+@handler.add(UnfollowEvent)
+def hanle_unfollow(event):
+    your_id = event.source.user_id
+    #友達削除時にユーザーIDの削除を行う
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DROP SCHEMA IF EXISTS {}".format(your_id))
+"""
+
+
+#グループ参加時の処理
+@handler.add(JoinEvent)
+def handle_join(event):
+    global step,roles,role_numbers,message_list,dead,group_id,game_id,url,night_count
+    night_count = 1
+    step = []
+    roles = ["人狼", "狂人", "村人", "占い師", "霊媒師", "騎士", "パン屋"]
+    url=["https://lh3.googleusercontent.com/Uu3MmkKvRqLYwOk5uWyOO-wlqglu2L/deuOhPPU5Tw92iE2wGQ7wU1YTjLVKh67Ax0wHPcUkuBMif9r8bkF6BLqqiTNfW6hgKVtgd4Vtq9Y1WvOHficUMsAVSb2RrN6e31071k0qnAS2XBjV16EmYOu3Eb1pNppefsXIUB4YX047z7FMLeo5PrRpwrGM62D86qnKEtrfr5jtbFoxzaHh1JlbYiBND0YoWVMPFW3S5nPDHgTkfxeAPlv44cvDdvo73yJ5-ulnto7B4Q_BIi7SUc8zde1Gx5JR-A8evwnsGxyCBbmQFbFDot5n7x5BLhHMLwTtRYg-xwzNyZbx9tC5pUyEmD-_Q16BBirNDvfQOf8TvcgpxHBYt0fuwBuxFenAAMBm6MWj5xUQhr0lJqEXPQFgLTlZYDq-5IWsFJZeurUu8tMq0pmIU9hPB614mRBVGypjQMq-6hZDHoyjEkvBbngk0p4LXHtUSl1QZzLELTzD2x4-VTipIUdmXDFNiW06Z2m5llNhESjUENa_kPt-LK5AHZSTNRQx014tw1T-INLyGxNHcZ-X65CcyJ2dK8pr4fgnmTY4ec7BtI0DjvlaUgD9Vs6sJ8pl1URZ9xEitg6zoAPRhmNZZPP3E06XAbNkSjVZ7nmplfYSLDfAnoPtiPZIDFPimRjVTDmbUbC-3f2KlMwziJcy2NQP7vCheQOW_mkVAiLEt-T0MFmCGKqd4R_8=w1024-h576-no?authuser=3",
+    "https://lh3.googleusercontent.com/pTunE77UpKfYzresd0QkhMoAGIXsldoM4RsDTzMgKx7ER680QPYiPfNJ0nJHi0p9V2DOzl5lwPz31QdQGTW_mc3LZC5xoxrBFfVm6kTQHYBl62LrAs0fubHUnHL-VZN7mHN5XmBgXJsqPug3CIs_P7oH0-8lyoIxgRPXTqNvsd1VIJToM20tMIBf_6xORvFi7fjUHECNCBv5JhMFZHUUM-l1mVnPy4vEd_UypfvbietLungCKNgPl9wmTv949owljVX5-E_wItybBTi2crCLM32rMACh7WrH4QH5BVE1UaL2BaWYqs4p5uOmai1Yf9F78Ldxy-hmscFt_zuw6S-ythjSf2x_rqEmGihMuFV2X-mGxJU2hRIQIAhL_U-spkar9IQS-MCbMzAt1yXAnXPBL0rUyYDgQpbwMwJNeiWYygsudhaz0ESL3AdDaQy6yMd7HEwH4q9fio_bESM0xIq5aokImeFqJ7KZSj_ldr27fZtKPzPJwAx68TG8s9wjjtcJDj_Ed17qd3uYQptyfzT2_jyRfsEUk0Dola47KNY5_FYnlxajBiQudnKoGI0r0mxpiXWvdHx-BllMIRzhZsPe7GFTENnMWy29sbewl6d1Tr0fgzVqza-ADqRLs0BmJzVmIX4UtpbjoCkmpEgLp7LukZA_j88BzbL5z15ykeCTuSyi2lEBSwxjUVlptJiNwXVcUFMmKz1xqsX1qUh0rQMqnT4=w1024-h576-no?authuser=3",
+    "https://lh3.googleusercontent.com/mMlimLPlTa_9fXn1y6maEX9vh9a3rChsxAyLB0VGGhdqL-BqrL2I47b9_oF6XxDv2cP7pvtNxhr12jPrgDhF5M5fOSFtLNZcl6DmQOAgiXO1GByPk-z2SDzDofM3hi237Nm6busl1tufBFOvSHHZkMu_-lpjddRmCie4LL-NspIirLd0IPIK7vH8IPtFvaJWERFcU9ZJ4Mf2t4zOok3ykUMO2puioEYM41qpOqIABi3SeTmbPeiQUSJrbtasNK5muRY_uQTRpxAs9HlvmHpbSNaHZToCcy5b452skIor7XhLhrVvKM6G6M0rihCSA32QmBkcqDFktJeu7SucFtIUC8Rej283OCyKWPoZdbXe9PpiyxK-u2yx3O8as42iFaspAhmcQ1VHniPVKuHXTIotOd5Fp0hHj2oXGj31AiXDxP4kHYMFmIxjlr74RQYjbWKcwpVtkiOh2HVcjILEjabFgqIdNjU45JrI5KM8Ne8FU6pbniu1NcybOPYHN-68xCdzsqcgSTDTbwtbZTlmNdeh0_1FY2tpIyJdu48t9zHqQFRv0dUUfUKl9YLNpcD8Gic9mmD0IFrBv3XFPmqDluYLcDvMrHTtkp7hWRrebUdt3j8gF2R8-YbgKyUfwim-o124OVxRT7of0VggWWJcYMnAZKh_u1nxw2lhxFbSgR5uB5cdUx9KDkFEaVdIP4tScD5wl6xtnpNR-0QQqj1gFAL_Elg=w1024-h576-no?authuser=3",
+    "https://lh3.googleusercontent.com/hZRTvtkn1YXQg10MXvttSvjC7NCXih6JWg8WgAZMZr2C2y0RbE0offdLMBbG66R91ppl5VLfgofChMuthDXUFmUD-ugbyB4U0p4StHmSTkYEYk5IdyE1mb3tPChc1dnFut6jlGZVakXhSGmlw0Bv8IABI0nSHXjcioDCD2pP6njrphTgP1Yj1lC1wcSWWLHObPeOKxzTNR-AVWjEEC6yx0hBTZ2u2ag75M5Ur3AqO4a0pgRSPHnTQ8qA3HGKv8CG8ZTGlNjWHSEjD-aYxm7pEMvIL3U4_3vLVeoFbNj9gnjIFnKCQgVYISBPDGfU5wjzBPHhf3lVOYdVpf-HkLXj1eaMKExdLMZtbwHK2gL8VGNw_gqt5764PuiNwzq3ihAjICFDWnUmhinaIZVjtca2GZPZ9bz0e1iwcjEX849SiOyhTodI8PqUdAV8pYFRLtoGAltZPY1GidtJZ-YQJQdla2oa0as8Sra6PtLE0xYXkXBOVEVjeOQz83eDBzvbV8-Wlq__v7XjIr8Jlw_onwQiSG7p6lWtxaBVVigmndF9zChxCGy4UWFcBp-ouqKOj5XyHlq4PYVIa0qdaw7Yqf2Gz87MhcoRsnSifIgNoeUYAUaro1khKSNcjioS2QkYS79LFKb35QRFyg0wN4WhFaTef7-oR7raVUHfme_bYkzEnVdJksKzzQm_VNBSGI9nY8UNAwUHEP7BBYqw73V9gaqZj5o=w1024-h576-no?authuser=3",
+    "https://lh3.googleusercontent.com/MaPfOX8ktaUEWN-PBHTFoUcmAe5cl1EGVeu0A0qr8hU_8SV6WbT07UNul8bASPGpAYXiDulXM5IjwGY-8YuBUzCB0HjeRIiFzdLFAL-8epvsBcUqvphwopnV-B7SdPEJdkXpIsYu1oN6AlNr1OAtBlysiwrCuKK7cjS5rspWPLHZ06Eldi1eXcTdtfwxlmd4UYnNoO7TIYy0NA5k7vvQIYqDGMr36tO_KQk4Hm400tVG99l0aQjukhry1pjICU0-zuGWzb3RNB7yiYYWVJZfQ2Tp5-OU4G7LDofvt2wOFpEYDXU1U2m-xiCKuW_83_v-kQSlc6jQxdn2j7NZyRvHpgBCHZ-PmV_VtoxZh9mVdGAY_AeHOs_T1SUt476x6oP8m_rjiHPcS5elkeqFDK7WGCyphnw97g4xloH0sr_MFoy4C3u3nsR32e2jmTTB1YLAXLgmoaO1i1dkGOjVrHSjSZwGKUiyvygMGrcsgaaJCOh_7oot8C6lulrT2C9xIxZlN3Xms1_8LdYSf7W6JQxyFkP7LWGPSRR1sykxXBedsRLnrvpw-c8Ysyylkwf_GqudVPcwcFTUoEApC07t3kQXw8Sk0fYpDo6HdkHDgd1W4UkHnbEBH0CACLBlaJ8VwUJk_U3NdiTCfj4QbCiLowLjL9ucKmqgOEGyBkDBRX5719Kd6sh3X3oOWoVswtgS1vmVYXsOVAJmKGw46twi57MmyEU=w1024-h576-no?authuser=3",
+    "https://lh3.googleusercontent.com/sOX5Dq3sb_kk-d7UHO_LIl2_8Fzo9HswTHFlLuDtPbHgCYpmIbZfo-Bb1K7a56JKUWQMOhj-mRyax_vaF1U8USM5LfgwOQ3u5NACjAZ3PrSrSZ4uyRcPt28ZqU6yl6ktbvfyGAG9mKwJY1MDEp2HWcIUO_KbTrVr5rlo86yaLZVzPlnbbTHvnTNz1FUsDz146xEJ7AZyfvXiF8c3wSfB_Q8EEGZQ0j4yYfbn7_c4rbYCB10RH2-HxiFkCksh7NeGJWpSEweRTbcbO6-cxq8SDEOvKX6jR40vW_HHzsvO5yQKuJ1-AnJMTEKjHhxn60bs1yhWlu8PNi3Kk63M_zhHxt2EhLZ4kv3OBhbTQY4VYTPlcvsHP64Nv8ephp9iYHixY0xa7N4rSuVsfLyir8H3f1G1yHuKqLi1jT7KF9ThL4J0joaXyxsI9c04IFxzWJvVpaccHwM8rb_qhfTZcG-rCpEMONjQfvoaXgzvvod5TdS9GiGrvWFPaOyp2_oyloR4d5_pFp9YhJHRAgTnf87MLaMG4SHHu1ez1BCFocptIWkmoWuBFxNbd-907ST1whwcDzwiSBGYXzZMclzFh-YKlFnaydgQFCoWoKHX0Lh5eCDsoAdkpwigWoLdTp_ilaPfUMIIoIToKnSAqorqf1l1W_GSpUR1TS1Pv_NlL6o399m1nrn1UwU-5W_O6YRsJEqtEfcz9nC0jRljAOxVJlkk8hw=w1024-h576-no?authuser=3",
+    "https://lh3.googleusercontent.com/Dp1ShvtRZocjgfLaom19LBi85VhIJbxMoSvLXfm4pUVk_AcAfI_RmTiVT8Fa0te32FWAPStDCNlm3Nz2CqSRy5hRjk0E-lOVjgIH3x_-4wI6duYHFKwVKeLLCmYpq0RhdKhX-T6REZOYQnTa3bkKkqitpObdx-iP5SHMku9MgX7nXnm8RIm_LyJIBHPB9lJLY-jk7aXblVeKqk5a9DJDOj3mU2l7C3n0lchTjo0iB5l9opjj0L1Kfdw0uejB2Ncsr5PFJhNpNHQsJsbg3-cLbCJQFCjih5TKKbtdb1bwRrv_OD3nfCae6MX4KxIOePpmMDMmKWyCbFjkpkcZSq1a3amv78vf3_vC37mC6Jqug226462h8LuCUv6mCNi3bzisXRICh_STLVM4YAq0_BdkdO5GIAqMApFe0NojczUb0RxbUxKnACZM5VrF4mou1t4FK27vPMOoEDjyueT8z3zPyqUs5CGgArCzGaIJvVRO8J2QXApum3rRmnALXzJiqrbVTktXDrFv-tqT-70SL3jk-0KEpe4fNuSd5ZM55P5P11UR1-PY-Vg3XpKaFednxb0-G1SGVPv5yQNMYLjNRqY8ESFqHYDb77GuCSCyp_M-UUbfVJyq3hn2hfgUNhAHYZl2LeVtMbcTlWvqA1l7ZpFg7gmpxJLRsKrh-S-To563Y1r2_g2TTmtOpjEN0mw00O-9d3DEKLXa6X4BvfgUzif6v5A=w1024-h576-no?authuser=3"]
+    role_numbers = []
+    for i in range(len(roles)):
+        role_numbers.append(0)
+    message_list = []
+    for i in range(len(roles)):
+        message_list.append(0)
+    dead = "無し" 
+    group_id = event.source.group_id
+    game_id = "".join(random.choices(string.ascii_letters + string.digits, k=8))
+    message = "今回のゲームIDは\n{}\n"\
+              "このゲームIDをボットとの個人チャットで送信するか参加ボタンを押すことで、"\
+              "参加者として登録される。".format(game_id)
+    line_bot_api.push_message(group_id, TextSendMessage(text=message))
+    #ゲーム参加ボタン
+    message = button.join_button()
+    line_bot_api.push_message(group_id, messages=message)
+    #役職選択ボタン
+    message = TemplateSendMessage(
+        alt_text="役職選択",
+        template=CarouselTemplate(columns=button.carousel(roles, url))
+    )
+    line_bot_api.push_message(group_id, messages=message)
+    #役職選択完了ボタン
+    message = button.select_button()
+    line_bot_api.push_message(group_id, messages=message)
+
+#ゲーム用のテーブル作成
+    query = "CREATE TABLE IF NOT EXISTS tousaka (" \
+            "id char(33) PRIMARY KEY,"\
+            "name varchar(10) NOT NULL,"\
+            "role varchar(10) NOT NULL,"\
+            "poll varchar(10) NOT NULL,"\
+            "status varchar(10) NOT NULL)"
+    with db:
+        db.execute(query)  
+
+@handler.add(MessageEvent,message=TextMessage)
+def handle_message(event):
+    text = event.message.text
+    #ゲームID受信時の処理
+    if text == "再設定":
+        if len(step) == 0:
+            for i in range(len(roles)):
+                role_numbers[i] = 0
+            message = TemplateSendMessage(
+                alt_text="カルーセル",
+                template=CarouselTemplate(columns=button.carousel(roles, url)),
+            )
+            line_bot_api.reply_message(event.reply_token, messages=message)
+            message = button.select_button()
+            line_bot_api.push_message(group_id, messages=message)
+        else:
+            message = "すでに抽選を終えているので再設定はできません。"
+            line_bot_api.reply_message(event.reply_token,TextSendMessage(text=message))
+    elif text == "確認":
+        for i in range(len(roles)):
+            message_list[i] = "{} : {}人".format(roles[i],role_numbers[i])
+        message = "\n".join(message_list)
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=message))
+    elif text == "抽選":
+        if len(step) == 0:
+            line_bot_api.push_message(group_id, TextSendMessage(text="抽選中です...待ってて"))
+            global nameList
+            nameList = []
+            #nameList = worksheet.get_name()
+            with db:
+                cur = db.execute("select name from tousaka")
+                rows = cur.fetchall()
+                for i in rows:
+                    nameList.append(i[0])
+            jinrou_list=[]
+            role_list = []
+            for i in range(len(roles)):
+                for n in range(role_numbers[i]):
+                    jinrou_list.append(roles[i])
+            for i in range(len(nameList)):
+                rand_n = random.randint(0, len(nameList)-1)
+                while rand_n in role_list:
+                    rand_n = random.randint(0, len(nameList)-1)
+                role_list.append(rand_n)
+                with db:
+                    db.execute("UPDATE tousaka SET role='{}' WHERE name='{}'".format(jinrou_list[rand_n], nameList[i]))
+
+            step.append(1)
+            #抽選結果の通知
+            global idList, roleList
+            idList = []
+            #nameList = worksheet.get_name()
+            with db:
+                cur = db.execute("select id from tousaka")
+                rows = cur.fetchall()
+                for i in rows:
+                    idList.append(i[0])
+            roleList = []
+            #nameList = worksheet.get_name()
+            with db:
+                cur = db.execute("select role from tousaka")
+                rows = cur.fetchall()
+                for i in rows:
+                    roleList.append(i[0])
+
+            for i in range(len(idList)):
+                message = "あなたの役職は\n「" + roleList[i] + "」\nです"
+                line_bot_api.push_message(idList[i], TextSendMessage(text=message))
+                time.sleep(1)
+            message = "抽選完了です。個人チャットにて確認してください\n\n設定が完了したのでゲームを開始します。"
+            line_bot_api.push_message(group_id, TextSendMessage(text=message))
+            #ゲーム開始
+            #初日占いありならここに追加
+            #(１日目：夜...)
+            game()
+            #worksheet.overwrite(30, 1, "game関数終了")
+        else:
+            message = "抽選済みです。"
+            line_bot_api.reply_message(event.reply_token, TextSendMessage(text=message))
+    elif text == "タイマー":
+        timer = 0
+        timer_start = int(time.time())
+        while timer != 10:
+            timer_end = int(time.time())
+            timer = timer_end - timer_start
+        line_bot_api.push_message(group_id, TextSendMessage(text="finish"))
+    elif text == "test":
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text="reply_message"))
+        line_bot_api.push_message(group_id, TextSendMessage(text="push_message"))
+    else:
+        line_bot_api.reply_message(
+            event.reply_token,TextSendMessage(text="しらない言葉だにぇ")) 
+        #pass
+
+@handler.add(PostbackEvent)
+def handle_message(event):
+    event_data = event.postback.data
+    with db:
+        cur=db.execute("select count(*) from tousaka")
+        rows=cur.fetchone()
+
+    """if rows[0]!=0:
+        nameList = []
+        with db:
+            cur = db.execute("select name from tousaka")
+            rows = cur.fetchall()
+            for i in rows:
+                nameList.append(i[0])
+        idList = []
+        with db:
+            cur = db.execute("select id from tousaka")
+            rows = cur.fetchall()
+            for i in rows:
+                idList.append(i[0])
+        roleList = []
+        with db:
+            cur = db.execute("select role from tousaka")
+            rows = cur.fetchall()
+            for i in rows:
+                roleList.append(i[0])"""
+    if event_data == "select_button":
+        count = 0
+        for i in range(len(roles)):
+            count = count + role_numbers[i]
+        if len(nameList)==count :
+            line_bot_api.push_message(group_id, TextSendMessage(text = "役職の人数を設定しました。"))
+            line_bot_api.push_message(
+                group_id, TextSendMessage(
+                    text="再設定は「再設定」と入力する事で可能です。\n"\
+                         "役職の人数確認は「確認」と入力してください。\n"\
+                         "役職抽選に移る場合は「抽選」と入力してください。"\
+                         "ただし抽選後は「再設定」不可となります。"
+                )
+            )
+        else:
+            line_bot_api.push_message(group_id, TextSendMessage(
+                text="参加人数と役職の人数が一致していません。\n"\
+                     "選択しなおしてください。"
+            ))
+            for i in range(len(roles)):
+                role_numbers[i] = 0
+            #役職選択ボタン
+            message = TemplateSendMessage(
+                alt_text="役職選択",
+                template=CarouselTemplate(columns=button.carousel(roles, url))
+            )
+            line_bot_api.push_message(group_id, messages=message)
+            #役職選択完了ボタン
+            message = button.select_button()
+            line_bot_api.push_message(group_id, messages=message)
+    elif event_data == "join_button":
+        line_bot_api.push_message(group_id, TextSendMessage(text="抽選中です...待ってて"))
+        user_id = event.source.user_id
+        profile = line_bot_api.get_profile(user_id)
+        with db:
+            db.execute("INSERT INTO tousaka VALUES ('{}', '{}', '', '', 'alive')".format(user_id, profile.display_name))
+        message = "ゲームID「" + game_id + "」のプレイヤーに登録しました。"
+        line_bot_api.push_message(user_id, TextSendMessage(text=message))
+
+
+    #占いの結果送信
+    elif event_data[:7] == "fortune":
+        count_i = 8
+        name = []
+        for i in event_data[count_i:]:
+            if i == "/":
+                count_i += 1
+                break
+            else:
+                count_i += 1
+                name.append(i)
+        name = "".join(name)
+        role = []
+        for i in event_data[count_i:]:
+            role.append(i)
+        role = "".join(role)
+
+        for i in range(len(roleList)):
+            if roleList[i]=='占い師':
+                user_id=idList[i]
+        message = "＜　占い結果　＞\n" + name + ":" + role
+        line_bot_api.push_message(user_id, TextSendMessage(text=message))
+    #霊能者の結果を返す
+    elif event_data[:6] == "reibai":
+        count_i = 7
+        name = []
+        for i in event_data[count_i:]:
+            if i == "/":
+                count_i += 1
+                break
+            else:
+                count_i += 1
+                name.append(i)
+        name = "".join(name)
+        role = []
+        for i in event_data[count_i:]:
+            role.append(i)
+        role = "".join(role)
+        for i in range(len(roleList)):
+            if roleList[i]=='霊媒師':
+                user_id=idList[i]
+        message = "＜　霊媒結果　＞\n" + name + ":" + role
+        line_bot_api.push_message(user_id, TextSendMessage(text=message))
+    #人狼の投票結果反映
+    elif event_data[:7] =="jinkill":
+        name = []
+        for i in event_data[8:]:
+            name.append(i)
+        name = "".join(name)
+        with db:
+            db.execute("UPDATE tousaka status='death' where name='{}'".format(name))
+
+                #message = "＜　人狼結果　＞\n"  + "本日の犠牲者は" + jintouhyou[int(event_data[7])] + "です"
+                #line_bot_api.push_message(group_id, TextSendMessage(text=message))
+        dead = name
+    #処刑投票の結果をシートに記入する
+    elif event_data[:9] == "execution":
+        with db:
+            db.execute("UPDATE tousaka SET poll='{}' WHERE id='{}'".format(event_data[9:42], event_data[42:75]))
+        check_poll = []
+        pollList = []
+        with db:
+            cur = db.execute("select poll from tousaka")
+            rows = cur.fetchall()
+            for i in rows:
+                pollList.append(i[0])
+        for i in list_alive:
+            check_poll.append(pollList[i])
+        if None not in check_poll:
+            #投票リストの要素数カウント変数
+            execution_number = 0
+            #処刑者のリスト
+            executed = []
+            #投票最頻要素をexecutedに格納
+            for i in set(check_poll):
+                if execution_number < check_poll.count(i):
+                    execution_number = check_poll.count(i)
+                    #最頻が更新されたので処刑リストも更新
+                    executed = [i]
+                elif execution_number == check_poll.count(i):
+                    #投票最頻重複の際にリストにappend
+                    executed.append(i)
+                else:
+                    pass
+            if len(executed) != 1:
+            #最頻重複の際にランダムで処刑決定、executed[0]に追加
+                executed = [ executed[random.randint(0, len(executed)-1)] ]
+            else:
+                pass
+            for i in range(len(idList)):
+                if idList[i] == executed[0]:
+                    break
+            message = "全員の投票が完了しました。\n"\
+                    "投票の結果、「" + nameList[i] + "」さんが処刑されます。"
+            line_bot_api.push_message(group_id, TextSendMessage(text=message))
+            #処刑されたプレイヤーの状態をdeathに変更
+            with db:
+                db.execute("UPDATE tousaka SET status='death' WHERE id='{}'".format(executed[0]))
+
+            #人狼陣営と村人陣営の人数比較
+            #jinrou_Meibo_List=jinrou_Meibo()
+            #ningen_Meibo_List=ningen_Meibo()
+            with db:
+                cur=db.execute("select count(*) from tousaka where role='人狼' and status='alive'")
+                jinrou_num=cur.fetchone()[0]
+                cur=db.execute("select count(*) from tousaka where role!='人狼' and status='alive'")
+                ningen_num=cur.fetchone()[0]
+                print(ningen_num)
+                if jinrou_num<ningen_num:
+                    print('市民の勝利')
+                else:
+                    print('人狼の勝利')
+            """
+            if len(jinrou_Meibo_List)==0:
+                message = "＜　結果発表　＞\n" "市民側の勝利です"
+                line_bot_api.push_message(group_id, TextSendMessage(text=message))
+            elif len(jinrou_Meibo_List)==len(ningen_Meibo_List):
+                message = "＜　結果発表　＞\n" "人狼側の勝利です"
+                line_bot_api.push_message(group_id, TextSendMessage(text=message))
+            else:
+            """
+            #勝敗が決定しなかった場合なので、夜の行動に移る
+            message = "{}日目の夜がやってきました。\n各自夜の行動に移ってください。".format(night_count)
+            line_bot_api.push_message(group_id, TextSendMessage(text=message))
+            with db:
+                cur=db.execute("select id from tousaka where status='alive' and role='占い師'")
+                rows=cur.fetchone()
+                user_id=rows[0]
+            touhyou_name,touhyou_role,touhyou_id=getouhyou(user_id)
+            message = TemplateSendMessage(alt_text="占い選択",template=CarouselTemplate(columns=poll.fortune_telling(touhyou_name)))
+            line_bot_api.push_message(user_id, messages=message)
+            #人狼のキル投票
+            with db:
+                cur=db.execute("select id from tousaka where status='alive' and role='人狼'")
+                rows=cur.fetchone()
+                user_id=rows[0]
+            jintouhyou=jinrou_touhyou()
+            message = TemplateSendMessage(alt_text="人狼のキル",template=CarouselTemplate(columns=poll.jinrou_killing(jintouhyou)))
+            line_bot_api.push_message(user_id, messages=message)
+            #霊媒師の投票
+            with db:
+                cur=db.execute("select id from tousaka where status='alive' and role='霊媒師'")
+                rows=cur.fetchone()
+                user_id=rows[0]
+            death_note_List_n=death_note()[0]
+            death_note_List_r=death_note()[1]
+            message = TemplateSendMessage(alt_text="霊媒師選択",template=CarouselTemplate(columns=poll.reibai_telling(death_note_List_n)))
+            line_bot_api.push_message(user_id, messages=message)
+            #騎士の投票
+            with db:
+                cur=db.execute("select id from tousaka where status='alive' and role='霊媒師'")
+                rows=cur.fetchone()
+                user_id=rows[0]
+            touhyou_name=getouhyou(user_id)[0]
+            touhyou=getouhyou(user_id)[0]
+            message = TemplateSendMessage(alt_text="騎士選択",template=CarouselTemplate(columns=poll.garding(touhyou)))
+            line_bot_api.push_message(user_id, messages=message)
+            #パン屋
+            with db:
+                cur=db.execute("select id from tousaka where status='alive' and role='パン屋'")
+            message= TextSendMessage(text='パンが届きました')
+            line_bot_api.push_message(group_id, messages=message)
+            with db:
+                cur=db.execute("select id from tousaka where status='death' and role='パン屋'")
+            message= TextSendMessage(text='パンが届きませんでした。')
+            line_bot_api.push_message(group_id, messages=message)
+                
+            game()
+
+    #騎士の投票結果反映
+    elif event_data[:5] =="kishi":
+        name = []
+        for i in event_data[6:]:
+            name.append(i)
+        name = "".join(name)
+        with db:
+            cur=db.execute("update tousaka set status='gard' value where status='alive' and name=('{}')". format(name))
+        with db:
+            cur=db.execute("select id from tousaka where status='alive' and role='騎士'")
+            rows=cur.fetchone()
+            user_id=rows[0]
+        message = "＜　騎士結果　＞\n"  + "本日は" + name + "を守ります"
+        line_bot_api.push_message(user_id, TextSendMessage(text=message))
+        """roleList=worksheet.get_role()
+        idList=worksheet.get_id()
+        nameList=worksheet.get_name()
+        for i in range (len(nameList)):
+            if nameList[i] == name:
+               worksheet.overwrite(i+2,worksheet.status,"gard")
+        for i in range(len(roleList)):
+            if roleList[i]=='騎士':
+                user_id=idList[i]
+            message = "＜　騎士結果　＞\n"  + "本日は" + name + "を守ります"
+            line_bot_api.push_message(user_id, TextSendMessage(text=message))"""
+    #役職の人数選択のカルーセル
+    else:
+        role_id = int(event_data[20])
+        role_number = int(event_data[21])
+        role_numbers[role_id] = role_number
+
+@handler.add(LeaveEvent)
+def handle_message(event):
+    with connect() as conn:
+            with conn.cursor() as cur: 
+                cur.execute("delete from tousaka")
+                
+
+
+
+
+#アプリの実行
+if __name__=="__main__":
+    port=int(os.getenv("PORT",5000))
+    app.run(host="0.0.0.0",port=port)
