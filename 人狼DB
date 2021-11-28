@@ -155,8 +155,6 @@ def game():
     #本日の生存者のオフセットをリストに格納
     global list_alive
     list_alive = []
-    with db:
-        db.execute("")
     for i in range(len(statusList)):
         if statusList[i] == "alive":
             list_alive.append(i)
@@ -307,7 +305,7 @@ def handle_join(event):
             "id char(33) PRIMARY KEY,"\
             "name varchar(10) NOT NULL,"\
             "role varchar(10) NOT NULL,"\
-            "poll varchar(10) NOT NULL,"\
+            "poll char(33) NOT NULL,"\
             "status varchar(10) NOT NULL)"
     with db:
         db.execute(query)  
@@ -526,9 +524,8 @@ def handle_message(event):
         dead = name
     #処刑投票の結果をシートに記入する
     elif event_data[:9] == "execution":
-        line_bot_api.push_message(group_id, TextSendMessage(test = "こんにちは"))
         with db:
-            db.execute("UPDATE jinrou SET poll='{}' WHERE id='{}'".format(event_data[9:42], event_data[42:75]))
+            db.execute("UPDATE jinrou SET poll='{}' WHERE id='{}'".format(event_data[42:75], event_data[9:42]))
         check_poll = []
         pollList = []
         with db:
@@ -673,9 +670,7 @@ def handle_message(event):
 @handler.add(LeaveEvent)
 def handle_message(event):
     with db:
-        db.execute("DELETE FROM jinrou")
-                
-
+        db.execute("DROP TABLE jinrou")
 
 
 
