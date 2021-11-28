@@ -1,0 +1,191 @@
+import time, os, psycopg2
+from linebot.models import CarouselColumn, PostbackAction, TemplateSendMessage, ButtonsTemplate
+
+DATABASE_URL = os.environ['DATABASE_URL']
+
+class button:
+    #カルーセルの表示
+    def carousel(roles, n):
+        columns = [
+            CarouselColumn(
+                thumbnail_image_url=n[i],
+                title = roles[i],
+                text = "選択肢を選んでください。",
+                actions = [
+                    PostbackAction(
+                        label = "1人",
+                        data = "action=click&itemid={}1".format(i),
+                    ),
+                    PostbackAction(
+                        label = "２人",
+                        data = "action=click&itemid={}2".format(i),
+                    ),
+                    PostbackAction(
+                        label = "３人",
+                        data = "action=click&itemid={}3".format(i),
+                    ),
+                ]
+            )
+            for i in range(len(roles))
+        ]
+        return columns
+
+    #完了ボタン
+    def select_button():
+        message = TemplateSendMessage(
+            alt_text="完了ボタン",
+            template=ButtonsTemplate(
+                text="役職選択完了したらおして",
+                title="完了ボタン",
+                actions=[
+                    PostbackAction(
+                        label="設定完了",
+                        data="select_button"
+                    )
+                ]
+            )
+        )
+        return message
+    #参加ボタン
+    def join_button():
+        message = TemplateSendMessage(
+            alt_text="参加ボタン",
+            template=ButtonsTemplate(
+                text="参加する人はおして",
+                title="参加ボタン",
+                actions=[
+                    PostbackAction(
+                        label="参加",
+                        data="join_button"
+                    )
+                ]
+            )
+        )
+        return message
+    #初日白確占いの有無設定
+    def first_f_telling():
+        columns = [
+            CarouselColumn(
+                thumbnail_image_url="https://lh3.googleusercontent.com/4HtgBz4gL-1BVLG54iFNBgQTzNRatLDAaCzlUsWnZEpds96ZGK0npgBpTnpgGczJDq1esxkX1ggHOuNWqFiZC2xnCYLi290X-ILy9mxs2L5UjtKEnNewRc3aaGe_fT7WcA=w1280",
+                title = "初日白確出有無設定",
+                text = "選択肢を選んでください。",
+                actions = [
+                    PostbackAction(
+                        label = "有",
+                        data = "f_f_telling1",
+                    ),
+                    PostbackAction(
+                        label = "無",
+                        data = "f_f_telling0",
+                    ),
+                ]
+            )
+        ]
+        return columns
+
+class poll:
+    def fortune_telling(touhyou_name, touhyou_role):
+        columns = [
+            CarouselColumn(
+                thumbnail_image_url="https://lh3.googleusercontent.com/4HtgBz4gL-1BVLG54iFNBgQTzNRatLDAaCzlUsWnZEpds96ZGK0npgBpTnpgGczJDq1esxkX1ggHOuNWqFiZC2xnCYLi290X-ILy9mxs2L5UjtKEnNewRc3aaGe_fT7WcA=w1280",
+                title = "占いの実行",
+                text = "占いたい人を次から選んでください",
+                actions = [
+                    PostbackAction(
+                        label=touhyou_name[i],
+                        data = "fortune/{}/{}".format(touhyou_name[i], touhyou_role[i]),
+                    ),
+                ]
+            )
+            for i in range(len(touhyou_name))
+        ]
+        return columns
+
+    def jinrou_killing(jintouhyou):
+        columns = [
+            CarouselColumn(
+                thumbnail_image_url="https://lh3.googleusercontent.com/4HtgBz4gL-1BVLG54iFNBgQTzNRatLDAaCzlUsWnZEpds96ZGK0npgBpTnpgGczJDq1esxkX1ggHOuNWqFiZC2xnCYLi290X-ILy9mxs2L5UjtKEnNewRc3aaGe_fT7WcA=w1280",
+                title = "人狼キル",
+                text = "殺したい人を次から選んでください",
+                actions = [
+                    PostbackAction(
+                        label=jintouhyou[i],
+                        data = "jinkill/{}".format(jintouhyou[i]),
+                    ),
+                ]
+            )
+            for i in range(len(jintouhyou))
+        ]
+        return columns
+
+    def reibai_telling(death_note_List_n, death_note_List_r):
+        columns = [
+            CarouselColumn(
+                thumbnail_image_url="https://lh3.googleusercontent.com/4HtgBz4gL-1BVLG54iFNBgQTzNRatLDAaCzlUsWnZEpds96ZGK0npgBpTnpgGczJDq1esxkX1ggHOuNWqFiZC2xnCYLi290X-ILy9mxs2L5UjtKEnNewRc3aaGe_fT7WcA=w1280",
+                title = "霊媒師の実行",
+                text = "占いたい人を次から選んでください",
+                actions = [
+                    PostbackAction(
+                        label=death_note_List_n[i],
+                        data = "reibai/{}/{}".format(death_note_List_n[i], death_note_List_r[i]),
+                    ),
+                ]
+            )
+            for i in range(len(death_note_List_n))
+        ]
+        return columns
+
+    def garding(touhyou):
+        columns = [
+            CarouselColumn(
+                thumbnail_image_url="https://lh3.googleusercontent.com/4HtgBz4gL-1BVLG54iFNBgQTzNRatLDAaCzlUsWnZEpds96ZGK0npgBpTnpgGczJDq1esxkX1ggHOuNWqFiZC2xnCYLi290X-ILy9mxs2L5UjtKEnNewRc3aaGe_fT7WcA=w1280",
+                title = "ガードの実行",
+                text = "ガードしたい人を次から選んでください",
+                actions = [
+                    PostbackAction(
+                        label=touhyou[i],
+                        data = "kishi/{}".format(touhyou[i]),
+                    ),
+                ]
+            )
+            for i in range(len(touhyou))
+        ]
+        return columns
+    def execution(alive_name, user_id, alive_id):
+        columns = [
+            CarouselColumn(
+                thumbnail_image_url="https://lh3.googleusercontent.com/4HtgBz4gL-1BVLG54iFNBgQTzNRatLDAaCzlUsWnZEpds96ZGK0npgBpTnpgGczJDq1esxkX1ggHOuNWqFiZC2xnCYLi290X-ILy9mxs2L5UjtKEnNewRc3aaGe_fT7WcA=w1280",
+                title = "処刑投票",
+                text = "本日処刑する人に投票してください",
+                actions = [
+                    PostbackAction(
+                        label=alive_name[i],
+                        data = "execution{}{}".format(user_id, alive_id[i]),
+                    ),
+                ]
+            )
+            for i in range(len(alive_name))
+        ]
+        return columns
+    
+class DB:
+    def __init__(self):
+        self.con = None
+        self.cur = None
+    def __enter__(self):
+        self.con =psycopg2.connect(DATABASE_URL)
+        self.cur = self.con.cursor()
+    def __exit__(self, exc_type, exc_value, traceback):
+        if exc_type:
+            self.con = None
+            self.cur = None
+            return False
+        self.con.commit()
+        self.cur.close()
+        self.con.close()
+        self.con = None
+        self.cur = None
+        return True
+    def execute(self, query):
+        self.cur.execute(query)
+        return self.cur
