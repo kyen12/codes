@@ -1,6 +1,4 @@
-from re import template
 from flask import Flask,request,abort
-from flask.app import setupmethod
 from linebot import LineBotApi,WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import (MessageEvent,TextMessage,TextSendMessage,
@@ -9,12 +7,9 @@ from linebot.models import (MessageEvent,TextMessage,TextSendMessage,
                             CarouselColumn, CarouselTemplate, URITemplateAction,
                             PostbackTemplateAction, PostbackEvent, JoinEvent,LeaveEvent
                             )
-from linebot.models.actions import MessageAction, PostbackAction
 from linebot.models.events import Postback, PostbackEvent
-import random, string, os, gspread, time, glob , psycopg2
-from oauth2client.client import Storage
-from oauth2client.service_account import ServiceAccountCredentials
-from Class import  RemoteControlGoogleSpreadSheet,button,poll,DB
+import random, string, os,  time, psycopg2
+from Class import  button,poll,DB
 
 
 app=Flask(__name__)
@@ -27,49 +22,19 @@ line_bot_api=LineBotApi(YOUR_CHANNEL_ACCESS_TOKEN)
 handler=WebhookHandler(YOUR_CHANNEL_SECRET)
 db=DB()
 
-
-
-
-def connect():
-   return psycopg2.connect(DATABASE_URL,sslmode='require')
-def make_image_message():
-    messages = ImageSendMessage(
-        original_content_url="https://lh4.googleusercontent.com/TcrQgIcM9u6KNJMoSXbmjWWKIVVx_lQ0DwgUkQz_U6IrD0ncT0KXOvj6O_fh6ud3JyajHhkBqc7wdAdd0N_u9WipEZx-c_-RBqCJxVMj9VWUvI6aZxKgJ-qcUnSukHK7PQ=w1280", #JPEG 最大画像サイズ：240×240 最大ファイルサイズ：1MB(注意:仕様が変わっていた)
-        preview_image_url="https://lh4.googleusercontent.com/TcrQgIcM9u6KNJMoSXbmjWWKIVVx_lQ0DwgUkQz_U6IrD0ncT0KXOvj6O_fh6ud3JyajHhkBqc7wdAdd0N_u9WipEZx-c_-RBqCJxVMj9VWUvI6aZxKgJ-qcUnSukHK7PQ=w1280" #JPEG 最大画像サイズ：1024×1024 最大ファイルサイズ：1MB(注意:仕様が変わっていた)
-    )
-    return messages
-"""def getouhyou(user_id):#state=aliveのusernameとってくる,
-    #worksheet=RemoteControlGoogleSpreadSheet(game_id)
-    touhyou_name=[]
-    touhyou_role=[]
-    touhyou_id=[]
-    statusList = worksheet.get_status()
-    for i in range(worksheet.detect_last_row(1)-2):
-        if statusList[i]=="alive" and idList[i] != user_id:
-            #その列のusernameとりたい
-            touhyou_name.append(nameList[i])
-            if roleList[i] == "人狼":
-                uranairole="人狼"
-            elif roleList[i] != "人狼":
-                uranairole="人間"
-            else:
-                pass
-            touhyou_role.append(uranairole)
-            touhyou_id.append(idList[i])
-    return touhyou_name, touhyou_role, touhyou_id"""
 def getouhyou(user_id):
     with db:
-        cur = db.execute("select id from tousaka where id not in ('{}') and status='alive'". format(user_id))
+        cur = db.execute("select id from jinrou where id not in ('{}') and status='alive'". format(user_id))
         rows = cur.fetchall()
         touhyou_id=[]
         for i in rows:
             touhyou_id.append(i[0])
-        cur = db.execute("select name from tousaka where id not in ('{}') and status='alive'". format(user_id))
+        cur = db.execute("select name from jinrou where id not in ('{}') and status='alive'". format(user_id))
         rows = cur.fetchall()
         touhyou_name=[]
         for i in rows:
             touhyou_name.append(i[0])
-        cur = db.execute("select role from tousaka where id not in ('{}') and status='alive'". format(user_id))
+        cur = db.execute("select role from jinrou where id not in ('{}') and status='alive'". format(user_id))
         rows = cur.fetchall()
         touhyou_r=[]#一旦DBからrole正しく取得
         for i in rows:
@@ -85,20 +50,9 @@ def getouhyou(user_id):
     return touhyou_name,touhyou_role,touhyou_id
 
 
-"""#人狼投票専用の生きてる人のリスト（人狼をのぞく生存者）
-def jinrou_touhyou():#state=aliveのusernameとってくる,
-    #worksheet=RemoteControlGoogleSpreadSheet(game_id)
-    jintouhyou=[]
-    statusList = worksheet.get_status()
-    jinrou_Meibo_List=jinrou_Meibo()
-    for i in range(worksheet.detect_last_row(1)-2):
-        if statusList[i]=="alive" and idList[i] not in jinrou_Meibo_List:
-            #その列のusernameとりたい
-            jintouhyou.append(nameList[i])
-    return jintouhyou"""
 def jinrou_touhyou():
     with db:
-        cur=db.execute("select name from tousaka where status='alive' and role !='人狼'")
+        cur=db.execute("select name from jinrou where status='alive' and role !='人狼'")
         rows=cur.fetchall()
         jintouhyou=[]
         for i in rows:
@@ -107,50 +61,24 @@ def jinrou_touhyou():
 
 def death_note():
     with db:
-        cur=db.execute("select name from tousaka where status='death'")
+        cur=db.execute("select name from jinrou where status='death'")
         rows = cur.fetchall()
         deathnotelist_n = []
         #リストの中のコンマを取り除く
         for i in rows:
             deathnotelist_n.append(i[0])
-        cur=db.execute("select role from tousaka where status='death'")
+        cur=db.execute("select role from jinrou where status='death'")
         rows = cur.fetchall()
         deathnotelist_r = []
         #リストの中のコンマを取り除く
         for i in rows:
             deathnotelist_r.append(i[0])
     return deathnotelist_n,deathnotelist_r
-"""#死亡者リスト
-def death_note():
-    death_note_List_n = []
-    death_note_List_r = []
-    #worksheet=RemoteControlGoogleSpreadSheet(game_id)
-    statusList = worksheet.get_status()
-    statusList = worksheet.get_status()
-    for i in range(worksheet.detect_last_row(1)-2):
-        if statusList[i]=="death":
-            #その列のusernameとりたい
-            death_note_List_n.append(nameList[i])
-            death_note_List_r.append(roleList[i])
-    return death_note_List_n, death_note_List_r"""
 
-"""#人狼の生存者リスト
-def jinrou_Meibo():
-    global jinrou_Meibo_List
-    jinrou_Meibo_List=[]
-    worksheet=RemoteControlGoogleSpreadSheet(game_id)
-    roleList = worksheet.get_role()
-    statusList = worksheet.get_status()
-    for i in range(worksheet.detect_last_row(1)-2):
-        if roleList[i]=="人狼" and statusList[i]=="alive":
-            jinrou_Meibo_List.append(idList[i])
-        else:
-            pass
-    return jinrou_Meibo_List"""
 #生きている人狼のリスト取得
 def jinrou_Meibo():
     with db:
-        cur=db.execute("select name from tousaka where status='alive' and role='人狼'")
+        cur=db.execute("select name from jinrou where status='alive' and role='人狼'")
         rows = cur.fetchall()
         jinrou_Meibo_List=[]
         #リストの中のコンマを取り除く
@@ -158,47 +86,49 @@ def jinrou_Meibo():
             jinrou_Meibo_List.append(i[0])
     return jinrou_Meibo_List
 
-
-"""#人間の生存者リスト
-def ningen_Meibo():
-    global ningen_Meibo_List
-    ningen_Meibo_List=[]
-    worksheet=RemoteControlGoogleSpreadSheet(game_id)
-    roleList = worksheet.get_role()
-    statusList = worksheet.get_status()
-    for i in range(worksheet.detect_last_row(1)-2):
-        if roleList[i]!="人狼" and statusList[i]=="alive":
-            ningen_Meibo_List.append(idList[i])
-        else:
-            pass
-    return ningen_Meibo_List"""
-
 def game():
     global night_count
     idList = []
             #nameList = worksheet.get_name()
     with db:
-        cur = db.execute("select id from tousaka")
+        cur = db.execute("select id from jinrou")
         rows = cur.fetchall()
         for i in rows:
             idList.append(i[0])
     roleList = []
     #nameList = worksheet.get_name()
     with db:
-        cur = db.execute("select role from tousaka")
+        cur = db.execute("select role from jinrou")
         rows = cur.fetchall()
         for i in rows:
             roleList.append(i[0])
     statusList = []
     with db:
-        cur = db.execute("select status from tousaka")
+        cur = db.execute("select status from jinrou")
         rows = cur.fetchall()
         for i in rows:
             statusList.append(i[0])
     message = "{}日目の夜がやってきました。\n夜の行動に移ってください。".format(night_count)
     line_bot_api.push_message(group_id, TextSendMessage(text=message))
+    """
+    #白確占い
+    if night_count == 1 and first_f_telling == 1:
+        with db:
+            cur = db.execute("SELECT id FROM jinrou WHERE role='占い師'")
+            rows = cur.fetchone()
+        user_id = rows[0]
+        with db:
+            cur = db.execute("SELECT name FROM jinrou WHERE role NOT IN ('占い師', '人狼') AND status='alive'")
+            rows = cur.fetchall()
+            f_f_telling_name_list=[]
+        for i in rows:
+            f_f_telling_name_list.append(i[0])
+        rand_n=random.randint(0, len(f_f_telling_name_list)-1)
+        message = "初日白確占いの結果\n"\
+                  "{}さんは人間です。".format(f_f_telling_name_list[rand_n])
+        line_bot_api.push_message(user_id, TextSendMessage(text=message))
+    """
     night_count += 1
-    #白確占い云々etcがある場合はここに追記
     global dead
     if dead == "無し":
         message = "夜が明けました。\n本日の犠牲者はいません。\n"\
@@ -211,23 +141,28 @@ def game():
         dead = "無し"
     #パン屋
     with db:
-        cur=db.execute("select id from tousaka where status='alive' and role='パン屋'")
-        message= TextSendMessage(text='パンが届きました')
-        line_bot_api.push_message(group_id, messages=message)
-    with db:
-        cur=db.execute("select id from tousaka where status='death' and role='パン屋'")
-        message= TextSendMessage(text='パンが届きませんでした。')
-        line_bot_api.push_message(group_id, messages=message)
+        cur=db.execute("SELECT status FROM jinrou WHERE role='パン屋'")
+        rows = cur.fetchone()
+    if len(rows[0]) != 0:
+        if rows[0] == "alive":
+            message = "パンが届きました。"
+        else:
+            message = "パンが届きませんでした。"
+    else:
+        message = "パンが届きませんでした。"
+    line_bot_api.push_message(group_id, TextSendMessage(text=message))
 
     #本日の生存者のオフセットをリストに格納
     global list_alive
     list_alive = []
+    with db:
+        db.execute("")
     for i in range(len(statusList)):
         if statusList[i] == "alive":
             list_alive.append(i)
 
     with db:
-        cur=db.execute("update tousaka set status='alive' where status='gard'")
+        cur=db.execute("update jinrou set status='alive' where status='gard'")
     #各個人に投票用カルーセル送信
     
     for i in range(len(statusList)):
@@ -323,11 +258,12 @@ def hanle_unfollow(event):
 #グループ参加時の処理
 @handler.add(JoinEvent)
 def handle_join(event):
-    global step,roles,role_numbers,message_list,dead,group_id,game_id,url,night_count
+    global step,roles,role_numbers,message_list,dead,group_id,game_id,url,night_count,first_f_telling
     night_count = 1
+    first_f_telling = 0
     step = []
     roles = ["人狼", "狂人", "村人", "占い師", "霊媒師", "騎士", "パン屋"]
-    url=["https://lh3.googleusercontent.com/Uu3MmkKvRqLYwOk5uWyOO-wlqglu2L/deuOhPPU5Tw92iE2wGQ7wU1YTjLVKh67Ax0wHPcUkuBMif9r8bkF6BLqqiTNfW6hgKVtgd4Vtq9Y1WvOHficUMsAVSb2RrN6e31071k0qnAS2XBjV16EmYOu3Eb1pNppefsXIUB4YX047z7FMLeo5PrRpwrGM62D86qnKEtrfr5jtbFoxzaHh1JlbYiBND0YoWVMPFW3S5nPDHgTkfxeAPlv44cvDdvo73yJ5-ulnto7B4Q_BIi7SUc8zde1Gx5JR-A8evwnsGxyCBbmQFbFDot5n7x5BLhHMLwTtRYg-xwzNyZbx9tC5pUyEmD-_Q16BBirNDvfQOf8TvcgpxHBYt0fuwBuxFenAAMBm6MWj5xUQhr0lJqEXPQFgLTlZYDq-5IWsFJZeurUu8tMq0pmIU9hPB614mRBVGypjQMq-6hZDHoyjEkvBbngk0p4LXHtUSl1QZzLELTzD2x4-VTipIUdmXDFNiW06Z2m5llNhESjUENa_kPt-LK5AHZSTNRQx014tw1T-INLyGxNHcZ-X65CcyJ2dK8pr4fgnmTY4ec7BtI0DjvlaUgD9Vs6sJ8pl1URZ9xEitg6zoAPRhmNZZPP3E06XAbNkSjVZ7nmplfYSLDfAnoPtiPZIDFPimRjVTDmbUbC-3f2KlMwziJcy2NQP7vCheQOW_mkVAiLEt-T0MFmCGKqd4R_8=w1024-h576-no?authuser=3",
+    url=["https://photos.google.com/photo/AF1QipNsDRxOOcQ56MjCNGaAV7Bb3NknwQ7qyXU-Vb4C",
     "https://lh3.googleusercontent.com/pTunE77UpKfYzresd0QkhMoAGIXsldoM4RsDTzMgKx7ER680QPYiPfNJ0nJHi0p9V2DOzl5lwPz31QdQGTW_mc3LZC5xoxrBFfVm6kTQHYBl62LrAs0fubHUnHL-VZN7mHN5XmBgXJsqPug3CIs_P7oH0-8lyoIxgRPXTqNvsd1VIJToM20tMIBf_6xORvFi7fjUHECNCBv5JhMFZHUUM-l1mVnPy4vEd_UypfvbietLungCKNgPl9wmTv949owljVX5-E_wItybBTi2crCLM32rMACh7WrH4QH5BVE1UaL2BaWYqs4p5uOmai1Yf9F78Ldxy-hmscFt_zuw6S-ythjSf2x_rqEmGihMuFV2X-mGxJU2hRIQIAhL_U-spkar9IQS-MCbMzAt1yXAnXPBL0rUyYDgQpbwMwJNeiWYygsudhaz0ESL3AdDaQy6yMd7HEwH4q9fio_bESM0xIq5aokImeFqJ7KZSj_ldr27fZtKPzPJwAx68TG8s9wjjtcJDj_Ed17qd3uYQptyfzT2_jyRfsEUk0Dola47KNY5_FYnlxajBiQudnKoGI0r0mxpiXWvdHx-BllMIRzhZsPe7GFTENnMWy29sbewl6d1Tr0fgzVqza-ADqRLs0BmJzVmIX4UtpbjoCkmpEgLp7LukZA_j88BzbL5z15ykeCTuSyi2lEBSwxjUVlptJiNwXVcUFMmKz1xqsX1qUh0rQMqnT4=w1024-h576-no?authuser=3",
     "https://lh3.googleusercontent.com/mMlimLPlTa_9fXn1y6maEX9vh9a3rChsxAyLB0VGGhdqL-BqrL2I47b9_oF6XxDv2cP7pvtNxhr12jPrgDhF5M5fOSFtLNZcl6DmQOAgiXO1GByPk-z2SDzDofM3hi237Nm6busl1tufBFOvSHHZkMu_-lpjddRmCie4LL-NspIirLd0IPIK7vH8IPtFvaJWERFcU9ZJ4Mf2t4zOok3ykUMO2puioEYM41qpOqIABi3SeTmbPeiQUSJrbtasNK5muRY_uQTRpxAs9HlvmHpbSNaHZToCcy5b452skIor7XhLhrVvKM6G6M0rihCSA32QmBkcqDFktJeu7SucFtIUC8Rej283OCyKWPoZdbXe9PpiyxK-u2yx3O8as42iFaspAhmcQ1VHniPVKuHXTIotOd5Fp0hHj2oXGj31AiXDxP4kHYMFmIxjlr74RQYjbWKcwpVtkiOh2HVcjILEjabFgqIdNjU45JrI5KM8Ne8FU6pbniu1NcybOPYHN-68xCdzsqcgSTDTbwtbZTlmNdeh0_1FY2tpIyJdu48t9zHqQFRv0dUUfUKl9YLNpcD8Gic9mmD0IFrBv3XFPmqDluYLcDvMrHTtkp7hWRrebUdt3j8gF2R8-YbgKyUfwim-o124OVxRT7of0VggWWJcYMnAZKh_u1nxw2lhxFbSgR5uB5cdUx9KDkFEaVdIP4tScD5wl6xtnpNR-0QQqj1gFAL_Elg=w1024-h576-no?authuser=3",
     "https://lh3.googleusercontent.com/hZRTvtkn1YXQg10MXvttSvjC7NCXih6JWg8WgAZMZr2C2y0RbE0offdLMBbG66R91ppl5VLfgofChMuthDXUFmUD-ugbyB4U0p4StHmSTkYEYk5IdyE1mb3tPChc1dnFut6jlGZVakXhSGmlw0Bv8IABI0nSHXjcioDCD2pP6njrphTgP1Yj1lC1wcSWWLHObPeOKxzTNR-AVWjEEC6yx0hBTZ2u2ag75M5Ur3AqO4a0pgRSPHnTQ8qA3HGKv8CG8ZTGlNjWHSEjD-aYxm7pEMvIL3U4_3vLVeoFbNj9gnjIFnKCQgVYISBPDGfU5wjzBPHhf3lVOYdVpf-HkLXj1eaMKExdLMZtbwHK2gL8VGNw_gqt5764PuiNwzq3ihAjICFDWnUmhinaIZVjtca2GZPZ9bz0e1iwcjEX849SiOyhTodI8PqUdAV8pYFRLtoGAltZPY1GidtJZ-YQJQdla2oa0as8Sra6PtLE0xYXkXBOVEVjeOQz83eDBzvbV8-Wlq__v7XjIr8Jlw_onwQiSG7p6lWtxaBVVigmndF9zChxCGy4UWFcBp-ouqKOj5XyHlq4PYVIa0qdaw7Yqf2Gz87MhcoRsnSifIgNoeUYAUaro1khKSNcjioS2QkYS79LFKb35QRFyg0wN4WhFaTef7-oR7raVUHfme_bYkzEnVdJksKzzQm_VNBSGI9nY8UNAwUHEP7BBYqw73V9gaqZj5o=w1024-h576-no?authuser=3",
@@ -359,9 +295,15 @@ def handle_join(event):
     #役職選択完了ボタン
     message = button.select_button()
     line_bot_api.push_message(group_id, messages=message)
+    #初日白出し有無ボタン
+    message = TemplateSendMessage(
+        alt_text="初日白確有無",
+        template=CarouselTemplate(columns=button.first_f_telling())
+    )
+    line_bot_api.push_message(group_id, messages=message)
 
 #ゲーム用のテーブル作成
-    query = "CREATE TABLE IF NOT EXISTS tousaka (" \
+    query = "CREATE TABLE IF NOT EXISTS jinrou (" \
             "id char(33) PRIMARY KEY,"\
             "name varchar(10) NOT NULL,"\
             "role varchar(10) NOT NULL,"\
@@ -400,7 +342,7 @@ def handle_message(event):
             nameList = []
             #nameList = worksheet.get_name()
             with db:
-                cur = db.execute("select name from tousaka")
+                cur = db.execute("select name from jinrou")
                 rows = cur.fetchall()
                 for i in rows:
                     nameList.append(i[0])
@@ -415,7 +357,7 @@ def handle_message(event):
                     rand_n = random.randint(0, len(nameList)-1)
                 role_list.append(rand_n)
                 with db:
-                    db.execute("UPDATE tousaka SET role='{}' WHERE name='{}'".format(jinrou_list[rand_n], nameList[i]))
+                    db.execute("UPDATE jinrou SET role='{}' WHERE name='{}'".format(jinrou_list[rand_n], nameList[i]))
 
             step.append(1)
             #抽選結果の通知
@@ -423,14 +365,14 @@ def handle_message(event):
             idList = []
             #nameList = worksheet.get_name()
             with db:
-                cur = db.execute("select id from tousaka")
+                cur = db.execute("select id from jinrou")
                 rows = cur.fetchall()
                 for i in rows:
                     idList.append(i[0])
             roleList = []
             #nameList = worksheet.get_name()
             with db:
-                cur = db.execute("select role from tousaka")
+                cur = db.execute("select role from jinrou")
                 rows = cur.fetchall()
                 for i in rows:
                     roleList.append(i[0])
@@ -467,29 +409,24 @@ def handle_message(event):
 @handler.add(PostbackEvent)
 def handle_message(event):
     event_data = event.postback.data
+    nameList = []
     with db:
-        cur=db.execute("select count(*) from tousaka")
-        rows=cur.fetchone()
-
-    """if rows[0]!=0:
-        nameList = []
-        with db:
-            cur = db.execute("select name from tousaka")
-            rows = cur.fetchall()
-            for i in rows:
-                nameList.append(i[0])
-        idList = []
-        with db:
-            cur = db.execute("select id from tousaka")
-            rows = cur.fetchall()
-            for i in rows:
-                idList.append(i[0])
-        roleList = []
-        with db:
-            cur = db.execute("select role from tousaka")
-            rows = cur.fetchall()
-            for i in rows:
-                roleList.append(i[0])"""
+        cur = db.execute("select name from jinrou")
+        rows = cur.fetchall()
+        for i in rows:
+            nameList.append(i[0])
+    idList = []
+    with db:
+        cur = db.execute("select id from jinrou")
+        rows = cur.fetchall()
+        for i in rows:
+            idList.append(i[0])
+    roleList = []
+    with db:
+        cur = db.execute("select role from jinrou")
+        rows = cur.fetchall()
+        for i in rows:
+            roleList.append(i[0])
     if event_data == "select_button":
         count = 0
         for i in range(len(roles)):
@@ -521,15 +458,17 @@ def handle_message(event):
             message = button.select_button()
             line_bot_api.push_message(group_id, messages=message)
     elif event_data == "join_button":
-        line_bot_api.push_message(group_id, TextSendMessage(text="抽選中です...待ってて"))
         user_id = event.source.user_id
         profile = line_bot_api.get_profile(user_id)
         with db:
-            db.execute("INSERT INTO tousaka VALUES ('{}', '{}', '', '', 'alive')".format(user_id, profile.display_name))
+            db.execute("INSERT INTO jinrou VALUES ('{}', '{}', '', '', 'alive')".format(user_id, profile.display_name))
         message = "ゲームID「" + game_id + "」のプレイヤーに登録しました。"
         line_bot_api.push_message(user_id, TextSendMessage(text=message))
-
-
+    elif event_data[:11] == "f_f_telling":
+        if event_data[11] == 1:
+            first_f_telling = 1
+        else:
+            first_f_telling = 0
     #占いの結果送信
     elif event_data[:7] == "fortune":
         count_i = 8
@@ -580,25 +519,26 @@ def handle_message(event):
             name.append(i)
         name = "".join(name)
         with db:
-            db.execute("UPDATE tousaka status='death' where name='{}'".format(name))
+            db.execute("UPDATE jinrou status='death' where name='{}'".format(name))
 
                 #message = "＜　人狼結果　＞\n"  + "本日の犠牲者は" + jintouhyou[int(event_data[7])] + "です"
                 #line_bot_api.push_message(group_id, TextSendMessage(text=message))
         dead = name
     #処刑投票の結果をシートに記入する
     elif event_data[:9] == "execution":
+        line_bot_api.push_message(group_id, TextSendMessage(test = "こんにちは"))
         with db:
-            db.execute("UPDATE tousaka SET poll='{}' WHERE id='{}'".format(event_data[9:42], event_data[42:75]))
+            db.execute("UPDATE jinrou SET poll='{}' WHERE id='{}'".format(event_data[9:42], event_data[42:75]))
         check_poll = []
         pollList = []
         with db:
-            cur = db.execute("select poll from tousaka")
+            cur = db.execute("select poll from jinrou")
             rows = cur.fetchall()
             for i in rows:
                 pollList.append(i[0])
         for i in list_alive:
             check_poll.append(pollList[i])
-        if None not in check_poll:
+        if '' not in check_poll:
             #投票リストの要素数カウント変数
             execution_number = 0
             #処刑者のリスト
@@ -627,15 +567,15 @@ def handle_message(event):
             line_bot_api.push_message(group_id, TextSendMessage(text=message))
             #処刑されたプレイヤーの状態をdeathに変更
             with db:
-                db.execute("UPDATE tousaka SET status='death' WHERE id='{}'".format(executed[0]))
+                db.execute("UPDATE jinrou SET status='death' WHERE id='{}'".format(executed[0]))
 
             #人狼陣営と村人陣営の人数比較
             #jinrou_Meibo_List=jinrou_Meibo()
             #ningen_Meibo_List=ningen_Meibo()
             with db:
-                cur=db.execute("select count(*) from tousaka where role='人狼' and status='alive'")
+                cur=db.execute("select count(*) from jinrou where role='人狼' and status='alive'")
                 jinrou_num=cur.fetchone()[0]
-                cur=db.execute("select count(*) from tousaka where role!='人狼' and status='alive'")
+                cur=db.execute("select count(*) from jinrou where role!='人狼' and status='alive'")
                 ningen_num=cur.fetchone()[0]
                 print(ningen_num)
                 if jinrou_num<ningen_num:
@@ -655,7 +595,7 @@ def handle_message(event):
             message = "{}日目の夜がやってきました。\n各自夜の行動に移ってください。".format(night_count)
             line_bot_api.push_message(group_id, TextSendMessage(text=message))
             with db:
-                cur=db.execute("select id from tousaka where status='alive' and role='占い師'")
+                cur=db.execute("select id from jinrou where status='alive' and role='占い師'")
                 rows=cur.fetchone()
                 user_id=rows[0]
             touhyou_name,touhyou_role,touhyou_id=getouhyou(user_id)
@@ -663,7 +603,7 @@ def handle_message(event):
             line_bot_api.push_message(user_id, messages=message)
             #人狼のキル投票
             with db:
-                cur=db.execute("select id from tousaka where status='alive' and role='人狼'")
+                cur=db.execute("select id from jinrou where status='alive' and role='人狼'")
                 rows=cur.fetchone()
                 user_id=rows[0]
             jintouhyou=jinrou_touhyou()
@@ -671,7 +611,7 @@ def handle_message(event):
             line_bot_api.push_message(user_id, messages=message)
             #霊媒師の投票
             with db:
-                cur=db.execute("select id from tousaka where status='alive' and role='霊媒師'")
+                cur=db.execute("select id from jinrou where status='alive' and role='霊媒師'")
                 rows=cur.fetchone()
                 user_id=rows[0]
             death_note_List_n=death_note()[0]
@@ -680,7 +620,7 @@ def handle_message(event):
             line_bot_api.push_message(user_id, messages=message)
             #騎士の投票
             with db:
-                cur=db.execute("select id from tousaka where status='alive' and role='霊媒師'")
+                cur=db.execute("select id from jinrou where status='alive' and role='霊媒師'")
                 rows=cur.fetchone()
                 user_id=rows[0]
             touhyou_name=getouhyou(user_id)[0]
@@ -689,11 +629,11 @@ def handle_message(event):
             line_bot_api.push_message(user_id, messages=message)
             #パン屋
             with db:
-                cur=db.execute("select id from tousaka where status='alive' and role='パン屋'")
+                cur=db.execute("select id from jinrou where status='alive' and role='パン屋'")
             message= TextSendMessage(text='パンが届きました')
             line_bot_api.push_message(group_id, messages=message)
             with db:
-                cur=db.execute("select id from tousaka where status='death' and role='パン屋'")
+                cur=db.execute("select id from jinrou where status='death' and role='パン屋'")
             message= TextSendMessage(text='パンが届きませんでした。')
             line_bot_api.push_message(group_id, messages=message)
                 
@@ -706,9 +646,9 @@ def handle_message(event):
             name.append(i)
         name = "".join(name)
         with db:
-            cur=db.execute("update tousaka set status='gard' value where status='alive' and name=('{}')". format(name))
+            cur=db.execute("update jinrou set status='gard' value where status='alive' and name=('{}')". format(name))
         with db:
-            cur=db.execute("select id from tousaka where status='alive' and role='騎士'")
+            cur=db.execute("select id from jinrou where status='alive' and role='騎士'")
             rows=cur.fetchone()
             user_id=rows[0]
         message = "＜　騎士結果　＞\n"  + "本日は" + name + "を守ります"
@@ -732,9 +672,8 @@ def handle_message(event):
 
 @handler.add(LeaveEvent)
 def handle_message(event):
-    with connect() as conn:
-            with conn.cursor() as cur: 
-                cur.execute("delete from tousaka")
+    with db:
+        db.execute("DELETE FROM jinrou")
                 
 
 
